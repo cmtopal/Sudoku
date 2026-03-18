@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sudoku</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  color:#1a1a1a;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+#app{
+  max-width:480px;
+  margin:0 auto;
+  padding:14px 12px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* Header */
+.header{display:flex;justify-content:space-between;align-items:center;}
+.title{font-size:22px;font-weight:700;}
+.stats{display:flex;gap:14px;}
+.stat{text-align:right;}
+.stat-val{font-size:17px;font-weight:600;line-height:1.2;}
+.stat-lbl{font-size:10px;color:#888;}
+.stat-val.err{color:#E24B4A;}
+
+/* Difficulty */
+.diff-row{display:flex;gap:6px;}
+.diff-btn{
+  flex:1;padding:7px 2px;
+  border:1px solid #ccc;border-radius:8px;
+  background:#fff;font-size:12px;font-weight:500;
+  cursor:pointer;color:#444;
+}
+.diff-btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+
+/* Grid */
+.grid-outer{
+  width:100%;
+  aspect-ratio:1/1;
+  border:2px solid #333;
+  border-radius:4px;
+  overflow:hidden;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(9,1fr);
+  width:100%;height:100%;
+}
+.cell{
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  border-right:0.5px solid #ccc;
+  border-bottom:0.5px solid #ccc;
+  cursor:pointer;
+  font-size:clamp(12px, 4vw, 22px);
+  font-weight:600;
+  color:#1a1a1a;
+  background:#fff;
+  user-select:none;
+  -webkit-user-select:none;
+}
+/* thick borders every 3 */
+.cell:nth-child(3n){border-right:2px solid #333;}
+.cell:nth-child(9n){border-right:none;}
+.cell:nth-child(n+19):nth-child(-n+27){border-bottom:2px solid #333;}
+.cell:nth-child(n+46):nth-child(-n+54){border-bottom:2px solid #333;}
+.cell:nth-child(n+73):nth-child(-n+81){border-bottom:none;}
+
+.cell.sel{background:#ddeeff!important;}
+.cell.hl{background:#f0f0ee;}
+.cell.user-val{color:#185FA5;}
+.cell.error{color:#E24B4A!important;}
+
+/* Notes inside cell */
+.notes{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(3,1fr);
+  width:100%;height:100%;
+  padding:1px;
+}
+.note{
+  display:flex;align-items:center;justify-content:center;
+  font-size:clamp(5px,1.5vw,9px);
+  font-weight:400;
+  color:#888;
+}
+
+/* Numpad */
+.numpad{
+  display:grid;
+  grid-template-columns:repeat(9,1fr);
+  gap:5px;
+}
+.num-btn{
+  aspect-ratio:1;
+  border:1px solid #ccc;border-radius:8px;
+  background:#fff;
+  font-size:clamp(14px,4.5vw,22px);
+  font-weight:700;
+  color:#185FA5;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;-webkit-user-select:none;
+}
+.num-btn:active{background:#f0f0ee;transform:scale(.92);}
+.num-btn.done{color:#ccc;pointer-events:none;}
+
+/* Actions */
+.actions{display:flex;gap:6px;}
+.act-btn{
+  flex:1;padding:10px 2px;
+  border:1px solid #ccc;border-radius:8px;
+  background:#fff;font-size:12px;font-weight:500;
+  cursor:pointer;color:#444;
+  user-select:none;-webkit-user-select:none;
+}
+.act-btn:active{background:#f0f0ee;}
+.act-btn.note-on{color:#185FA5;border-color:#185FA5;}
+.act-btn.danger{color:#E24B4A;}
+.act-btn.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+
+/* Win overlay */
+#win{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.5);
+  align-items:center;justify-content:center;z-index:99;
+}
+#win.show{display:flex;}
+.win-box{
+  background:#fff;border-radius:18px;
+  padding:32px 28px;text-align:center;
+  width:min(320px,85vw);
+}
+.win-emoji{font-size:44px;}
+.win-title{font-size:22px;font-weight:700;margin:10px 0 4px;}
+.win-sub{font-size:13px;color:#888;margin-bottom:14px;}
+.win-time{font-size:36px;font-weight:700;color:#185FA5;margin-bottom:20px;}
+.win-new{
+  width:100%;padding:13px;background:#1a1a1a;color:#fff;
+  border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="header">
+    <div class="title">Sudoku</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val err" id="err-val">0</div>
+        <div class="stat-lbl">hata</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="timer-val">0:00</div>
+        <div class="stat-lbl">süre</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="diff-row">
+    <button class="diff-btn active" onclick="setDiff(0)">Kolay</button>
+    <button class="diff-btn"        onclick="setDiff(1)">Orta</button>
+    <button class="diff-btn"        onclick="setDiff(2)">Zor</button>
+    <button class="diff-btn"        onclick="setDiff(3)">Uzman</button>
+  </div>
+
+  <div class="grid-outer">
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="numpad" id="numpad"></div>
+
+  <div class="actions">
+    <button class="act-btn"         id="note-btn" onclick="toggleNote()">Not: Kpalı</button>
+    <button class="act-btn"                        onclick="undo()">Geri Al</button>
+    <button class="act-btn danger"                 onclick="erase()">Sil</button>
+    <button class="act-btn primary"                onclick="newGame()">Yeni</button>
+  </div>
+
+</div>
+
+<div id="win">
+  <div class="win-box">
+    <div class="win-emoji">🎉</div>
+    <div class="win-title">Tebrikler!</div>
+    <div class="win-sub">Bulmacayı çözdünüz</div>
+    <div class="win-time" id="win-time">0:00</div>
+    <button class="win-new" onclick="newGame()">Yeni Oyun</button>
+  </div>
+</div>
+
+<script>
+const REMOVE=[36,46,52,58];
+let puzzle=[],solution=[],notes=[],selected=-1,noteMode=false;
+let mistakes=0,timerVal=0,timerInt=null,history=[],diff=0,won=false;
+
+function rnd(n){return 0|Math.random()*n;}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function valid(b,pos,num){
+  const row=0|pos/9, col=pos%9;
+  for(let i=0;i<9;i++){
+    if(b[row*9+i]===num&&row*9+i!==pos)return false;
+    if(b[i*9+col]===num&&i*9+col!==pos)return false;
+  }
+  const br=(0|row/3)*3, bc=(0|col/3)*3;
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+    const idx=(br+r)*9+(bc+c);
+    if(b[idx]===num&&idx!==pos)return false;
+  }
+  return true;
+}
+function solve(b){
+  const idx=b.indexOf(0);if(idx===-1)return true;
+  for(const n of shuffle([1,2,3,4,5,6,7,8,9])){
+    if(valid(b,idx,n)){b[idx]=n;if(solve(b))return true;b[idx]=0;}
+  }
+  return false;
+}
+function genPuzzle(){
+  const b=new Array(81).fill(0);solve(b);solution=[...b];
+  const pos=shuffle([...Array(81).keys()]);
+  for(let i=0;i<REMOVE[diff];i++)b[pos[i]]=0;
+  puzzle=b.map(v=>({val:v,given:v!==0,error:false}));
+  notes=Array(81).fill(null).map(()=>new Set());
+  mistakes=0;timerVal=0;selected=-1;won=false;history=[];
+}
+
+function fmt(s){return `${0|s/60}:${String(s%60).padStart(2,'0')}`;}
+
+function setDiff(d){
+  diff=d;
+  document.querySelectorAll('.diff-btn').forEach((b,i)=>b.classList.toggle('active',i===d));
+  newGame();
+}
+
+function newGame(){
+  clearInterval(timerInt);
+  noteMode=false;
+  const nb=document.getElementById('note-btn');
+  nb.textContent='Not: Kapalı';nb.classList.remove('note-on');
+  document.getElementById('err-val').textContent='0';
+  document.getElementById('timer-val').textContent='0:00';
+  document.getElementById('win').classList.remove('show');
+  genPuzzle();
+  renderGrid();
+  renderNumpad();
+  timerInt=setInterval(()=>{if(!won){timerVal++;document.getElementById('timer-val').textContent=fmt(timerVal);}},1000);
+}
+
+function shouldHL(sel,idx){
+  const sr=0|sel/9,sc=sel%9,ir=0|idx/9,ic=idx%9;
+  if(sr===ir||sc===ic)return true;
+  if((0|sr/3)===(0|ir/3)&&(0|sc/3)===(0|ic/3))return true;
+  if(puzzle[sel].val&&puzzle[idx].val&&puzzle[sel].val===puzzle[idx].val)return true;
+  return false;
+}
+
+function renderGrid(){
+  const g=document.getElementById('grid');
+  g.innerHTML='';
+  puzzle.forEach((cell,i)=>{
+    const d=document.createElement('div');
+    let cls='cell';
+    if(i===selected)cls+=' sel';
+    else if(selected>=0&&shouldHL(selected,i))cls+=' hl';
+    if(!cell.given&&cell.val)cls+=' user-val';
+    if(cell.error)cls+=' error';
+    d.className=cls;
+
+    if(cell.val){
+      d.textContent=cell.val;
+    } else if(notes[i].size>0){
+      const ng=document.createElement('div');
+      ng.className='notes';
+      for(let n=1;n<=9;n++){
+        const nd=document.createElement('div');
+        nd.className='note';
+        nd.textContent=notes[i].has(n)?n:'';
+        ng.appendChild(nd);
+      }
+      d.appendChild(ng);
+    }
+
+    d.addEventListener('click',()=>{selected=i;renderGrid();});
+    g.appendChild(d);
+  });
+  renderNumpad();
+}
+
+function countNum(n){return puzzle.filter(c=>c.val===n&&!c.error).length;}
+function renderNumpad(){
+  const np=document.getElementById('numpad');np.innerHTML='';
+  for(let n=1;n<=9;n++){
+    const b=document.createElement('button');
+    b.className='num-btn'+(countNum(n)>=9?' done':'');
+    b.textContent=n;
+    b.addEventListener('click',()=>inputNum(n));
+    np.appendChild(b);
+  }
+}
+
+function inputNum(n){
+  if(selected<0||won)return;
+  const cell=puzzle[selected];
+  if(cell.given)return;
+  if(noteMode&&!cell.val){
+    history.push({idx:selected,notes:new Set(notes[selected]),val:cell.val,error:cell.error,mistakes});
+    notes[selected].has(n)?notes[selected].delete(n):notes[selected].add(n);
+    renderGrid();return;
+  }
+  history.push({idx:selected,notes:new Set(notes[selected]),val:cell.val,error:cell.error,mistakes});
+  cell.val=n;cell.error=solution[selected]!==n;
+  if(cell.error){mistakes++;document.getElementById('err-val').textContent=mistakes;}
+  else{notes[selected].clear();clearRelated(selected,n);}
+  renderGrid();checkWin();
+}
+
+function clearRelated(idx,n){
+  const row=0|idx/9,col=idx%9;
+  for(let i=0;i<9;i++){notes[row*9+i].delete(n);notes[i*9+col].delete(n);}
+  const br=(0|row/3)*3,bc=(0|col/3)*3;
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++)notes[(br+r)*9+(bc+c)].delete(n);
+}
+
+function erase(){
+  if(selected<0||puzzle[selected].given)return;
+  history.push({idx:selected,notes:new Set(notes[selected]),val:puzzle[selected].val,error:puzzle[selected].error,mistakes});
+  puzzle[selected].val=0;puzzle[selected].error=false;
+  notes[selected].clear();renderGrid();
+}
+
+function undo(){
+  if(!history.length)return;
+  const h=history.pop();
+  puzzle[h.idx].val=h.val;puzzle[h.idx].error=h.error;
+  notes[h.idx]=h.notes;mistakes=h.mistakes;
+  document.getElementById('err-val').textContent=mistakes;
+  renderGrid();
+}
+
+function toggleNote(){
+  noteMode=!noteMode;
+  const btn=document.getElementById('note-btn');
+  btn.textContent=noteMode?'Not: Açık':'Not: Kapalı';
+  btn.classList.toggle('note-on',noteMode);
+}
+
+function checkWin(){
+  if(puzzle.every(c=>c.val!==0&&!c.error)){
+    won=true;clearInterval(timerInt);
+    document.getElementById('win-time').textContent=fmt(timerVal);
+    document.getElementById('win').classList.add('show');
+  }
+}
+
+document.addEventListener('keydown',e=>{
+  if('123456789'.includes(e.key)){inputNum(+e.key);return;}
+  if(e.key==='Backspace'||e.key==='Delete'){erase();return;}
+  if(e.key==='ArrowUp'&&selected>=9){selected-=9;renderGrid();}
+  if(e.key==='ArrowDown'&&selected<72){selected+=9;renderGrid();}
+  if(e.key==='ArrowLeft'&&selected%9>0){selected--;renderGrid();}
+  if(e.key==='ArrowRight'&&selected%9<8){selected++;renderGrid();}
+  if(e.key==='n'||e.key==='N')toggleNote();
+  if((e.ctrlKey||e.metaKey)&&e.key==='z')undo();
+});
+
+newGame();
+</script>
+</body>
+</html>
